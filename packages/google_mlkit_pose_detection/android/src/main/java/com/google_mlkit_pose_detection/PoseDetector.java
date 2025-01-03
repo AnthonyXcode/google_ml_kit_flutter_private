@@ -6,6 +6,7 @@ import androidx.annotation.NonNull;
 
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.pose.PoseDetection;
+import com.google.mlkit.vision.pose.PoseDetectorOptionsBase;
 import com.google.mlkit.vision.pose.PoseLandmark;
 import com.google.mlkit.vision.pose.accurate.AccuratePoseDetectorOptions;
 import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions;
@@ -67,15 +68,23 @@ public class PoseDetector implements MethodChannel.MethodCallHandler {
                 detectorMode = PoseDetectorOptions.SINGLE_IMAGE_MODE;
             }
 
+            String hardware = (String) options.get("hardware");
+            int preferredHardware = PoseDetectorOptionsBase.CPU;
+            if (hardware.equals("CPU_GPU")) {
+                preferredHardware = PoseDetectorOptionsBase.CPU_GPU;
+            }
+
             String model = (String) options.get("model");
             if (model.equals("base")) {
                 PoseDetectorOptions detectorOptions = new PoseDetectorOptions.Builder()
                         .setDetectorMode(detectorMode)
+                        .setPreferredHardwareConfigs(preferredHardware)
                         .build();
                 poseDetector = PoseDetection.getClient(detectorOptions);
             } else {
                 AccuratePoseDetectorOptions detectorOptions = new AccuratePoseDetectorOptions.Builder()
                         .setDetectorMode(detectorMode)
+                        .setPreferredHardwareConfigs(preferredHardware)
                         .build();
                 poseDetector = PoseDetection.getClient(detectorOptions);
             }
