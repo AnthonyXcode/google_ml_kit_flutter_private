@@ -1,12 +1,15 @@
 package com.google_mlkit_pose_detection;
 
+import android.content.AsyncQueryHandler;
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.pose.PoseDetection;
-import com.google.mlkit.vision.pose.PoseDetectorOptionsBase;
 import com.google.mlkit.vision.pose.PoseLandmark;
 import com.google.mlkit.vision.pose.accurate.AccuratePoseDetectorOptions;
 import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions;
@@ -16,9 +19,18 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
+import okhttp3.internal.Util;
 
 public class PoseDetector implements MethodChannel.MethodCallHandler {
     private static final String START = "vision#startPoseDetector";
@@ -26,6 +38,13 @@ public class PoseDetector implements MethodChannel.MethodCallHandler {
 
     private final Context context;
     private final Map<String, com.google.mlkit.vision.pose.PoseDetector> instances = new HashMap<>();
+    Executor executor = new ThreadPoolExecutor(
+            6,
+            18,
+            1000,
+            TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(4),
+            new BackgroundThreadFactory("pose_executor"));
 
     public PoseDetector(Context context) {
         this.context = context;
@@ -68,23 +87,17 @@ public class PoseDetector implements MethodChannel.MethodCallHandler {
                 detectorMode = PoseDetectorOptions.SINGLE_IMAGE_MODE;
             }
 
-            String hardware = (String) options.get("hardware");
-            int preferredHardware = PoseDetectorOptionsBase.CPU;
-            if (hardware.equals("CPU_GPU")) {
-                preferredHardware = PoseDetectorOptionsBase.CPU_GPU;
-            }
-
             String model = (String) options.get("model");
             if (model.equals("base")) {
                 PoseDetectorOptions detectorOptions = new PoseDetectorOptions.Builder()
                         .setDetectorMode(detectorMode)
-                        .setPreferredHardwareConfigs(preferredHardware)
+                        .setExecutor(executor)
                         .build();
                 poseDetector = PoseDetection.getClient(detectorOptions);
             } else {
                 AccuratePoseDetectorOptions detectorOptions = new AccuratePoseDetectorOptions.Builder()
                         .setDetectorMode(detectorMode)
-                        .setPreferredHardwareConfigs(preferredHardware)
+                        .setExecutor(executor)
                         .build();
                 poseDetector = PoseDetection.getClient(detectorOptions);
             }
@@ -120,5 +133,29 @@ public class PoseDetector implements MethodChannel.MethodCallHandler {
         if (poseDetector == null) return;
         poseDetector.close();
         instances.remove(id);
+    }
+}
+
+class BackgroundThreadFactory implements ThreadFactory {
+    private String tag;
+
+    BackgroundThreadFactory(String tag) {
+        this.tag = tag;
+    }
+
+    @Override
+    public Thread newThread(Runnable runnable) {
+        Thread thread = new Thread(runnable, "CustomThread" + tag);
+        thread.setName("CustomThread" + tag);
+        thread.setPriority(Thread.MAX_PRIORITY);
+
+        // A exception handler is created to log the exception from threads
+        thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+            @Override
+            public void uncaughtException(Thread thread, Throwable ex) {
+                Log.e("Thread error", thread.getName() + " encountered an error: " + ex.getMessage());
+            }
+        });
+        return thread;
     }
 }
