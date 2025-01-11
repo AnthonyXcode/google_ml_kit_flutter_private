@@ -12,7 +12,7 @@ public class GoogleMlKitPoseDetectionPlugin implements FlutterPlugin {
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
         channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), channelName);
-        channel.setMethodCallHandler(new PoseDetector(flutterPluginBinding.getApplicationContext()));
+        channel.setMethodCallHandler(new PoseDetector(flutterPluginBinding.getApplicationContext(), channel));
     }
 
     @Override

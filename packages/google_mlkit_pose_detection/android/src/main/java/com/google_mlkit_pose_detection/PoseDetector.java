@@ -7,8 +7,10 @@ import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.work.impl.utils.SynchronousExecutor;
 
 import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.pose.Pose;
 import com.google.mlkit.vision.pose.PoseDetection;
 import com.google.mlkit.vision.pose.PoseLandmark;
 import com.google.mlkit.vision.pose.accurate.AccuratePoseDetectorOptions;
@@ -38,16 +40,21 @@ public class PoseDetector implements MethodChannel.MethodCallHandler {
 
     private final Context context;
     private final Map<String, com.google.mlkit.vision.pose.PoseDetector> instances = new HashMap<>();
-    Executor executor = new ThreadPoolExecutor(
-            6,
-            18,
+    private final Executor executor = new ThreadPoolExecutor(
+            3,
+            3,
             1000,
             TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(4),
+            new ArrayBlockingQueue<>(6),
             new BackgroundThreadFactory("pose_executor"));
 
-    public PoseDetector(Context context) {
+//    private final Executor executor = Executors.newCachedThreadPool(new BackgroundThreadFactory("pose_executor"));
+
+    private final MethodChannel channel;
+    public PoseDetector(Context context, MethodChannel channel) {
+
         this.context = context;
+        this.channel = channel;
     }
 
     @Override
@@ -73,6 +80,7 @@ public class PoseDetector implements MethodChannel.MethodCallHandler {
         if (inputImage == null) return;
 
         String id = call.argument("id");
+//        String id = "123";
         com.google.mlkit.vision.pose.PoseDetector poseDetector = instances.get(id);
         if (poseDetector == null) {
             Map<String, Object> options = call.argument("options");
@@ -91,12 +99,14 @@ public class PoseDetector implements MethodChannel.MethodCallHandler {
             if (model.equals("base")) {
                 PoseDetectorOptions detectorOptions = new PoseDetectorOptions.Builder()
                         .setDetectorMode(detectorMode)
+                        .setPreferredHardwareConfigs(PoseDetectorOptions.CPU_GPU)
                         .setExecutor(executor)
                         .build();
                 poseDetector = PoseDetection.getClient(detectorOptions);
             } else {
                 AccuratePoseDetectorOptions detectorOptions = new AccuratePoseDetectorOptions.Builder()
                         .setDetectorMode(detectorMode)
+                        .setPreferredHardwareConfigs(PoseDetectorOptions.CPU_GPU)
                         .setExecutor(executor)
                         .build();
                 poseDetector = PoseDetection.getClient(detectorOptions);
@@ -121,6 +131,7 @@ public class PoseDetector implements MethodChannel.MethodCallHandler {
                                 }
                                 array.add(landmarks);
                             }
+//                            channel.invokeMethod("pose", "Hello from Java Android!");
                             result.success(array);
                         })
                 .addOnFailureListener(
@@ -145,7 +156,8 @@ class BackgroundThreadFactory implements ThreadFactory {
 
     @Override
     public Thread newThread(Runnable runnable) {
-        Thread thread = new Thread(runnable, "CustomThread" + tag);
+        ThreadGroup group = new ThreadGroup("threadGroup");
+        Thread thread = new Thread(group, runnable, "CustomThread" + tag, 1024);
         thread.setName("CustomThread" + tag);
         thread.setPriority(Thread.MAX_PRIORITY);
 
