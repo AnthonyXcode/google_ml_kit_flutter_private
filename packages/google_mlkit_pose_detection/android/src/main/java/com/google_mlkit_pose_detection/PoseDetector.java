@@ -40,13 +40,8 @@ public class PoseDetector implements MethodChannel.MethodCallHandler {
 
     private final Context context;
     private final Map<String, com.google.mlkit.vision.pose.PoseDetector> instances = new HashMap<>();
-    private final Executor executor = new ThreadPoolExecutor(
-            3,
-            3,
-            1000,
-            TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(6),
-            new BackgroundThreadFactory("pose_executor"));
+
+    private final Map<String, Executor> executors = new HashMap<>();
 
 //    private final Executor executor = Executors.newCachedThreadPool(new BackgroundThreadFactory("pose_executor"));
 
@@ -96,6 +91,14 @@ public class PoseDetector implements MethodChannel.MethodCallHandler {
             }
 
             String model = (String) options.get("model");
+
+            final Executor executor = new ThreadPoolExecutor(
+                    1,
+                    1,
+                    500,
+                    TimeUnit.MILLISECONDS,
+                    new ArrayBlockingQueue<>(1),
+                    new BackgroundThreadFactory(id));
             if (model.equals("base")) {
                 PoseDetectorOptions detectorOptions = new PoseDetectorOptions.Builder()
                         .setDetectorMode(detectorMode)
@@ -111,6 +114,7 @@ public class PoseDetector implements MethodChannel.MethodCallHandler {
                         .build();
                 poseDetector = PoseDetection.getClient(detectorOptions);
             }
+            executors.put(id, executor);
             instances.put(id, poseDetector);
         }
 
@@ -148,17 +152,15 @@ public class PoseDetector implements MethodChannel.MethodCallHandler {
 }
 
 class BackgroundThreadFactory implements ThreadFactory {
-    private String tag;
+    private String id;
 
-    BackgroundThreadFactory(String tag) {
-        this.tag = tag;
+    BackgroundThreadFactory(String id) {
+        this.id = id;
     }
 
     @Override
     public Thread newThread(Runnable runnable) {
-        ThreadGroup group = new ThreadGroup("threadGroup");
-        Thread thread = new Thread(group, runnable, "CustomThread" + tag, 1024);
-        thread.setName("CustomThread" + tag);
+        Thread thread = new Thread(runnable, id);
         thread.setPriority(Thread.MAX_PRIORITY);
 
         // A exception handler is created to log the exception from threads
