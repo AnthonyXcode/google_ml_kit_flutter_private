@@ -10,7 +10,7 @@ class PoseDetector {
   final PoseDetectorOptions options;
 
   /// Instance id.
-  final id = DateTime.now().microsecondsSinceEpoch.toString();
+  String id = DateTime.now().microsecondsSinceEpoch.toString();
 
   /// Constructor to create an instance of [PoseDetector].
   PoseDetector({required this.options});
@@ -18,24 +18,31 @@ class PoseDetector {
   /// Processes the given [InputImage] for pose detection.
   /// It returns a list of [Pose].
   Future<List<Pose>> processImage(InputImage inputImage) async {
-    final result = await _channel.invokeMethod(
-        'vision#startPoseDetector', <String, dynamic>{
-      'options': options.toJson(),
-      'id': id,
-      'imageData': inputImage.toJson()
-    });
+    try {
+      final result = await _channel.invokeMethod(
+          'vision#startPoseDetector', <String, dynamic>{
+        'options': options.toJson(),
+        'id': id,
+        'imageData': inputImage.toJson()
+      });
 
-    final List<Pose> poses = [];
-    for (final pose in result) {
-      final Map<PoseLandmarkType, PoseLandmark> landmarks = {};
-      for (final point in pose) {
-        final landmark = PoseLandmark.fromJson(point);
-        landmarks[landmark.type] = landmark;
+      final List<Pose> poses = [];
+      for (final pose in result) {
+        final Map<PoseLandmarkType, PoseLandmark> landmarks = {};
+        for (final point in pose) {
+          final landmark = PoseLandmark.fromJson(point);
+          landmarks[landmark.type] = landmark;
+        }
+        poses.add(Pose(landmarks: landmarks));
       }
-      poses.add(Pose(landmarks: landmarks));
-    }
 
-    return poses;
+      return poses;
+    } catch (e) {
+      await close();
+      await Future.delayed(const Duration(milliseconds: 500));
+      id = DateTime.now().microsecondsSinceEpoch.toString();
+      return processImage(inputImage);
+    }
   }
 
   /// Closes the detector and releases its resources.
@@ -53,11 +60,10 @@ class PoseDetectorOptions {
 
   final Hardware hardware;
 
-
   /// Constructor to create an instance of [PoseDetectorOptions].
   PoseDetectorOptions(
       {this.model = PoseDetectionModel.base,
-      this.mode = PoseDetectionMode.stream, 
+      this.mode = PoseDetectionMode.stream,
       this.hardware = Hardware.CPU});
 
   /// Returns a json representation of an instance of [PoseDetectorOptions].
